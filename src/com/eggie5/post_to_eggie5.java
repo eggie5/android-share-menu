@@ -2,81 +2,87 @@ package com.eggie5;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.util.Date;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+
 import org.apache.commons.codec.binary.Base64;
 import android.app.Activity;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Toast;
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.res.AssetFileDescriptor;
 
-public class post_to_eggie5 extends Activity {
+public class post_to_eggie5 extends Activity
+{
 	/** Called when the activity is first created. */
 	@Override
-	public void onCreate(Bundle savedInstanceState) {
+	public void onCreate(Bundle savedInstanceState)
+	{
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.main);
 
 		Intent intent = getIntent();
 		Bundle extras = intent.getExtras();
-
-		// final String mimeType = intent.getType();
 		String action = intent.getAction();
 
-		Log.i("asf", "asdf");
+		// if this is from the share menu
+		if (Intent.ACTION_SEND.equals(action))
+		{
+			if (extras.containsKey(Intent.EXTRA_STREAM))
+			{
+				try
+				{
+					// Get resource path from intent callee
+					Uri uri = (Uri) extras.getParcelable(Intent.EXTRA_STREAM);
 
-		if (Intent.ACTION_SEND.equals(action)) {
-			if (extras.containsKey(Intent.EXTRA_STREAM)) {
-				Uri uri = (Uri) extras.getParcelable(Intent.EXTRA_STREAM);
+					// Query gallery for camera picture via
+					// Android ContentResolver interface
+					ContentResolver cr = getContentResolver();
+					InputStream is = cr.openInputStream(uri);
+					// Get binary bytes for encode
+					byte[] data = getBytesFromFile(is);
 
-				Toast toast = Toast.makeText(this, "!!Image path: " + uri,
-						Toast.LENGTH_SHORT);
-				toast.show();
+					// base 64 encode for text transmission (HTTP)
+					byte[] encoded_data = Base64.encodeBase64(data);
+					String data_string = new String(encoded_data); // convert to
+																	// string
 
-				try {
-					final InputStream is = getContentResolver()
-							.openInputStream(uri);
-					final AssetFileDescriptor assetFileDescriptor = getContentResolver()
-							.openAssetFileDescriptor(uri, "r");
-					final int totalFileLength = (int) assetFileDescriptor
-							.getLength();
-					assetFileDescriptor.close();
+					SendRequest(data_string);
 
-					byte[] b = getBytesFromFile(uri.toString(),
-							totalFileLength, is);
-
-					// String data = android.util.Base64.encodeToString(b);
-
-					byte[] image_bytes = Base64.encodeBase64(b);
-
-					String data_string = new String(image_bytes);
-
-					sendpic(data_string);
 					return;
-				} catch (Exception e) {
-					Log.e("asdf", e.toString());
+				} catch (Exception e)
+				{
+					Log.e(this.getClass().getName(), e.toString());
 				}
 
-			} else if (extras.containsKey(Intent.EXTRA_TEXT)) {
-				// mWorkingMessage.setText(extras.getString(Intent.EXTRA_TEXT));
+			} else if (extras.containsKey(Intent.EXTRA_TEXT))
+			{
 				return;
 			}
 		}
 
 	}
 
-	private void sendpic(String data_string) {
+	private void SendRequest(String data_string)
+	{
 
-		try {
+		try
+		{
 			String xmldata = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-					+ "<photo><photo>" + data_string + "</photo><caption>via android</caption></photo>";
+					+ "<photo><photo>" + data_string
+					+ "</photo><caption>via android - " + new Date().toString()
+					+ "</caption></photo>";
 
 			// Create socket
 			String hostname = "eggie5.com";
@@ -103,44 +109,38 @@ public class post_to_eggie5 extends Activity {
 			BufferedReader rd = new BufferedReader(new InputStreamReader(
 					sock.getInputStream()));
 			String line;
-			while ((line = rd.readLine()) != null) {
-				Log.v("eggie5", line);
-				System.out.println(line);
+			while ((line = rd.readLine()) != null)
+			{
+				Log.v(this.getClass().getName(), line);
 			}
-		} catch (Exception e) {
+
+		} catch (Exception e)
+		{
 			Log.e(this.getClass().getName(), "Upload failed", e);
 		}
 
 	}
 
-	public static byte[] getBytesFromFile(String uri, Integer length,
-			InputStream is) {
-		try {
+	public static byte[] getBytesFromFile(InputStream is)
+	{
+		try
+		{
+			ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
-			if (length > Integer.MAX_VALUE) {
-				// File is too large
-			}
-			byte[] bytes = new byte[(int) length];
+			int nRead;
+			byte[] data = new byte[16384];
 
-			// Read in the bytes
-			int offset = 0;
-			int numRead = 0;
-			while (offset < bytes.length
-					&& (numRead = is.read(bytes, offset, bytes.length - offset)) >= 0) {
-				offset += numRead;
+			while ((nRead = is.read(data, 0, data.length)) != -1)
+			{
+				buffer.write(data, 0, nRead);
 			}
 
-			// Ensure all the bytes have been read in
-			if (offset < bytes.length) {
-				throw new IOException("Could not completely read file " + uri);
-			}
+			buffer.flush();
 
-			// Close the input stream and return bytes
-			is.close();
-			return bytes;
-		} catch (Exception e) {
-			Log.e("eggie5", " get file bytes didn't work!!!! - " + e.toString());
-			System.out.println(e);
+			return buffer.toByteArray();
+		} catch (IOException e)
+		{
+			Log.e("com.eggie5.post_to_eggie5", e.toString());
 			return null;
 		}
 	}
